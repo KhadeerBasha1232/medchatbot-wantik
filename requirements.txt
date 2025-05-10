@@ -5,3 +5,4 @@ biopython
 requests
 django-widget-tweaks
 django-cors-headers
+gunicorn
