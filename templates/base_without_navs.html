@@ -1,0 +1,21 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Document{% endblock %}</title>
+    <!-- <script src="{% static 'assets/js/script.js' %}"></script> -->
+    <link rel="stylesheet" href="{% static 'assets/css/output.css' %}">
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css" rel="stylesheet" />
+<!-- Add this in your HTML head section -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+        {% block content %}
+        <!-- Page content goes here -->
+        {% endblock %}
+    <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
+   
+</body>
+</html>

@@ -1,0 +1,63 @@
+{% extends 'base_without_navs.html' %}
+{% load widget_tweaks %}
+
+{% block title %}Register{% endblock %}
+
+{% block content %}
+<div class="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+    <div class="w-full max-w-sm p-4 bg-white border border-gray-200 rounded-lg shadow sm:p-6 md:p-8 dark:bg-gray-800 dark:border-gray-700">
+        <form method="POST" action="" class="space-y-6">
+            <h1 class="text-2xl font-bold text-center">chatbot</h1>
+            {% csrf_token %}
+            <h5 class="text-xl font-medium text-gray-900 dark:text-white text-center">Create your account</h5>
+            
+            {% for field in form %}
+            <div>
+                <div class="flex items-center gap-2 mb-2">
+                    <label for="{{ field.id_for_label }}" class="text-sm font-medium text-gray-900 dark:text-white">
+                        {{ field.label }}
+                    </label>
+                    {% if 'password' in field.name %}
+                    <button type="button" data-tooltip-target="tooltip-{{ field.name }}" class="text-gray-500 dark:text-gray-400">
+                        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                        </svg>
+                    </button>
+                    <div id="tooltip-{{ field.name }}" role="tooltip" class="absolute z-10 invisible inline-block px-3 py-2 text-sm font-medium text-white transition-opacity duration-300 bg-gray-900 rounded-lg shadow-sm opacity-0 tooltip dark:bg-gray-700">
+                        {{ field.help_text }}
+                        <div class="tooltip-arrow" data-popper-arrow></div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% render_field field class="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-blue-500 focus:border-blue-500 block w-full p-2.5 dark:bg-gray-600 dark:border-gray-500 dark:placeholder-gray-400 dark:text-white" %}
+                {% if field.errors %}
+                    {% for error in field.errors %}
+                        <p class="text-red-500 text-xs mt-1">{{ error }}</p>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            <div class="flex items-start">
+                <div class="flex items-start">
+                    <div class="flex items-center h-5">
+                        <input id="terms" type="checkbox" value="" class="w-4 h-4 border border-gray-300 rounded bg-gray-50 focus:ring-3 focus:ring-blue-300 dark:bg-gray-700 dark:border-gray-600 dark:focus:ring-blue-600 dark:ring-offset-gray-800 dark:focus:ring-offset-gray-800" required>
+                    </div>
+                    <label for="terms" class="ms-2 text-sm font-medium text-gray-900 dark:text-gray-300">I agree to the <a href="#" class="text-blue-700 hover:underline dark:text-blue-500">terms and conditions</a></label>
+                </div>
+            </div>
+
+            <button type="submit" class="w-full text-white bg-blue-700 hover:bg-blue-800 focus:ring-4 focus:outline-none focus:ring-blue-300 font-medium rounded-lg text-sm px-5 py-2.5 text-center dark:bg-blue-600 dark:hover:bg-blue-700 dark:focus:ring-blue-800">
+                Create account
+            </button>
+
+            <div class="text-sm font-medium text-gray-500 dark:text-gray-300">
+                Already registered? <a href="{% url 'chatbot:login' %}" class="text-blue-700 hover:underline dark:text-blue-500">Login here</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% endblock %}

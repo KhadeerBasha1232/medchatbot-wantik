@@ -1,0 +1,73 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Document{% endblock %}</title>
+    <!-- <script src="{% static 'assets/js/script.js' %}"></script> -->
+    <link rel="stylesheet" href="{% static 'assets/css/output.css' %}">
+    <link href="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.css"  rel="stylesheet" />
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .chat-container { height: calc(100vh - 200px); }
+        .typing-indicator::after {
+            content: '';
+            animation: typing 1s infinite;
+        }
+        @keyframes typing {
+            0% { content: ''; }
+            25% { content: '.'; }
+            50% { content: '..'; }
+            75% { content: '...'; }
+        }
+
+        .message-animation {
+            animation: messageSlide 0.3s ease-out;
+        }
+
+        @keyframes messageSlide {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .hover-scale {
+            transition: transform 0.2s;
+        }
+        .hover-scale:hover {
+            transform: scale(1.02);
+        }
+    </style>
+</head>
+<body>
+    {% include 'components/topbar.html' %}
+    {% include 'components/sidebar.html' %}
+    <main class="p-4 pt-20 sm:ml-64 print:pt-0 print:ml-0">
+        {% if messages %}
+        <div class="mt-4">
+            {% for message in messages %}
+            <div class="bg-green-100 text-green-800 px-4 py-2 rounded shadow mb-2 flex justify-between items-center">
+                <span>{{ message }}</span>
+                <button type="button" class="text-green-800 hover:text-red-500 font-bold ml-2" onclick="this.parentElement.style.display='none'">
+                    &times;
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        {% block content %}
+        <!-- Page content goes here -->
+        
+        {% endblock %}
+    </main>
+    <script src="https://cdn.jsdelivr.net/npm/flowbite@2.5.2/dist/flowbite.min.js"></script>
+   
+</body>
+</html>
