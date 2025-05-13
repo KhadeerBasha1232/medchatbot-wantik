@@ -9,6 +9,7 @@ from chatbot.services.uniprot_service import UniProtService
 from chatbot.services.genbank_service import GenBankService
 from chatbot.services.protein_atlas_service import ProteinAtlasService
 from chatbot.services.array_express_service import ArrayExpressService
+from chatbot.services.geo_service import GeoService
 
 load_dotenv()
 
@@ -20,6 +21,7 @@ class ChatGPTService:
         self.genbank_service = GenBankService()
         self.protein_atlas_service = ProteinAtlasService()
         self.array_express_service = ArrayExpressService()
+        self.geo_service = GeoService()
 
         self.analyze_tools = [
             {
@@ -91,6 +93,10 @@ class ChatGPTService:
                             "need_array_express": {
                                 "type": "boolean",
                                 "description": "Query ArrayExpress if protein keywords, gene symbols, or AD queries are present"
+                            },
+                            "need_geo": {
+                                "type": "boolean",
+                                "description": "Query GEO if protein keywords, gene symbols, or AD queries are present"
                             }
                         },
                         "required": [
@@ -108,7 +114,8 @@ class ChatGPTService:
                             "need_uniprot",
                             "need_genbank",
                             "need_protein_atlas",
-                            "need_array_express"
+                            "need_array_express",
+                            "need_geo"
                         ]
                     }
                 }
@@ -139,6 +146,7 @@ class ChatGPTService:
                         "Set 'need_genbank' to true for sequence_keywords. "
                         "Set 'need_protein_atlas' to true for protein_keywords, gene_symbols, or AD queries mentioning 'biomarkers' or 'protein'. "
                         "Set 'need_array_express' to true for protein_keywords, gene_symbols, or AD queries mentioning 'biomarkers', 'protein', or 'studies'. "
+                        "Set 'need_geo' to true for protein_keywords, gene_symbols, or AD queries mentioning 'biomarkers', 'protein', or 'studies'. "
                         "Set 'need_trials' to true for AD or preclinical AD queries to include relevant trials (e.g., A4, DIAN-TU). "
                         "Prioritize relevance, ensuring keywords align with the query’s intent and context."
                     )
@@ -150,6 +158,8 @@ class ChatGPTService:
             else:
                 messages.append({"role": "user", "content": user_query})
 
+            # Log messages for debugging
+            print(f"Messages sent to OpenAI: {messages}")
 
             response = self.client.chat.completions.create(
                 model="gpt-4",
@@ -177,6 +187,7 @@ class ChatGPTService:
                             combined_info += f"**Title:** {paper['title']}\n"
                             combined_info += f"**Abstract:** {paper['abstract']}\n"
                             combined_info += f"**PMID:** {paper['pmid']}\n\n"
+                    print(f"PubMed results: {pubmed_results}")
 
                 if args.get("need_trials"):
                     apis_called.append("Clinical Trials")
@@ -190,6 +201,7 @@ class ChatGPTService:
                             combined_info += f"**Interventions:** {', '.join(trial.get('interventions', ['Not specified']))}\n"
                             combined_info += f"**Description:** {trial.get('description', 'No description available')}\n"
                             combined_info += f"**NCT ID:** {trial['nct_id']}\n\n"
+                    print(f"Clinical Trials results: {trials_results}")
 
                 if args.get("need_ensembl") and (
                     args.get("gene_symbols") or args.get("variant_ids") or args.get("phenotype_terms")
@@ -205,6 +217,7 @@ class ChatGPTService:
                             combined_info += f"**Description:** {gene['description']}\n"
                             combined_info += f"**Biotype:** {gene['biotype']}\n"
                             combined_info += f"**Location:** {gene['chromosome']}:{gene['start']}-{gene['end']} ({gene['strand']})\n\n"
+                    print(f"Ensembl gene results: {gene_results}")
 
                     variant_results = []
                     for variant_id in args["variant_ids"]:
@@ -217,6 +230,7 @@ class ChatGPTService:
                             combined_info += f"**Transcript:** {variant['transcript_id']}\n"
                             combined_info += f"**Consequences:** {', '.join(variant['consequence_terms'])}\n"
                             combined_info += f"**Impact:** {variant['impact']}\n\n"
+                    print(f"Ensembl variant results: {variant_results}")
 
                     phenotype_results = []
                     for gene_symbol in args["gene_symbols"]:
@@ -228,6 +242,7 @@ class ChatGPTService:
                             combined_info += f"**Phenotype:** {p['phenotype_description']}\n"
                             combined_info += f"**Source:** {p['source']}\n"
                             combined_info += f"**Study:** {p['study']}\n\n"
+                    print(f"Ensembl phenotype results: {phenotype_results}")
 
                 if args.get("need_uniprot") and args.get("protein_keywords"):
                     apis_called.append("UniProt")
@@ -240,6 +255,7 @@ class ChatGPTService:
                             combined_info += f"**Accession:** {protein['accession']}\n"
                             combined_info += f"**Protein Name:** {protein['protein_name']}\n"
                             combined_info += f"**Organism:** {protein['organism']}\n\n"
+                    print(f"UniProt results: {uniprot_results}")
 
                 if args.get("need_protein_atlas") and (args.get("protein_keywords") or args.get("gene_symbols")):
                     apis_called.append("Protein Atlas")
@@ -263,6 +279,7 @@ class ChatGPTService:
                             combined_info += f"**Tissue Expression (Cerebral Cortex):** {protein['tissue_expression']}\n"
                             combined_info += f"**Pathology:** {protein['pathology']}\n"
                             combined_info += f"**Subcellular Location:** {protein['subcellular_location']}\n\n"
+                    print(f"Protein Atlas results: {protein_atlas_results}")
 
                 if args.get("need_array_express") and (args.get("protein_keywords") or args.get("gene_symbols") or "biomarkers" in user_query.lower()):
                     apis_called.append("ArrayExpress")
@@ -286,6 +303,31 @@ class ChatGPTService:
                             combined_info += f"**Description:** {study['description']}\n"
                             combined_info += f"**Assay Count:** {study['assay_count']}\n"
                             combined_info += f"**Study Type:** {study['study_type']}\n\n"
+                    print(f"ArrayExpress results: {array_express_results}")
+
+                if args.get("need_geo") and (args.get("protein_keywords") or args.get("gene_symbols") or "biomarkers" in user_query.lower()):
+                    apis_called.append("GEO")
+                    geo_results = []
+                    if args.get("protein_keywords"):
+                        for protein in args["protein_keywords"]:
+                            results = self.geo_service.search_geo(protein, max_results=2)
+                            geo_results.extend(results)
+                    if args.get("gene_symbols"):
+                        for symbol in args["gene_symbols"]:
+                            results = self.geo_service.search_geo(symbol, max_results=2)
+                            geo_results.extend(results)
+                    if not geo_results and "Alzheimer’s Disease" in condition_terms:
+                        results = self.geo_service.search_geo("Alzheimer’s Disease", max_results=3)
+                        geo_results.extend(results)
+                    if geo_results:
+                        combined_info += "## Study Information (GEO)\n\n"
+                        for study in geo_results:
+                            combined_info += f"**Accession:** {study['accession']}\n"
+                            combined_info += f"**Title:** {study['title']}\n"
+                            combined_info += f"**Summary:** {study['summary']}\n"
+                            combined_info += f"**Sample Count:** {study['sample_count']}\n"
+                            combined_info += f"**Study Type:** {study['study_type']}\n\n"
+                    print(f"GEO results: {geo_results}")
 
                 if args.get("need_genbank") and args.get("sequence_keywords"):
                     apis_called.append("GenBank")
@@ -297,8 +339,10 @@ class ChatGPTService:
                             combined_info += f"**Accession:** {sequence['accession']}\n"
                             combined_info += f"**Definition:** {sequence['definition']}\n"
                             combined_info += f"**Organism:** {sequence['organism']}\n\n"
+                    print(f"GenBank results: {genbank_results}")
 
                 print(f"\n=== APIs Called: {', '.join(apis_called)} ===\n")
+                print(combined_info)
 
                 # Update chat history
                 if chat_history is None:
@@ -338,7 +382,7 @@ class ChatGPTService:
                         "3. **Clinical Trials**: List trial details if available, ensuring relevance to AD (e.g., A4, DIAN-TU, ALZ-801).\n"
                         "4. **Genomic Information**: Include gene, variant, or phenotype data if available.\n"
                         "5. **Protein Information**: Prioritize Human Protein Atlas (HPA) data if available, followed by UniProt data. Include details like tissue expression (e.g., cerebral cortex), pathology, and subcellular location for HPA.\n"
-                        "6. **Study Information**: Include ArrayExpress/BioStudies data if available, detailing study accession, title, description, and assay count.\n"
+                        "6. **Study Information**: Include ArrayExpress and GEO data if available, detailing study accession, title, description/summary, assay/sample count, and study type.\n"
                         "7. **Sequence Information**: Include GenBank data if available.\n"
                         "8. **Biomarkers**: For AD or preclinical AD queries, list amyloid PET (plaque imaging), plasma p-tau (tau pathology marker), and APOE4 (genetic risk factor).\n"
                         "9. **Relevant Trials**: For AD, include A4 (NCT02008357, anti-amyloid), DIAN-TU (NCT01760005, inherited AD), or ALZ-801 (NCT04616690, tramiprosate) if relevant.\n"
