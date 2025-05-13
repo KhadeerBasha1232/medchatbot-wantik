@@ -29,56 +29,56 @@ class ChatGPTService:
                             "disease_keywords": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "keywords related to disease like CKD AND HF"
+                                "description": "Keywords like 'Alzheimer’s Disease', 'AD', 'dementia', 'preclinical AD'"
                             },
                             "treatment_keywords": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "keywords related to treatment like GLP-1 receptor"
+                                "description": "Treatments like 'amyloid', 'tau', 'donepezil'"
                             },
                             "gene_symbols": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Gene symbols like BRCA1 or TP53"
+                                "description": "Genes like 'APOE4', 'PSEN1', 'APP'"
                             },
                             "variant_ids": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Variant IDs like rs12345"
+                                "description": "Variant IDs like 'rs429358'"
                             },
                             "phenotype_terms": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Phenotype terms like breast cancer"
+                                "description": "Phenotypes like 'cognitive decline', 'memory loss'"
                             },
                             "protein_keywords": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Protein-related keywords like kinase or receptor"
+                                "description": "Proteins like 'amyloid-beta', 'tau protein'"
                             },
                             "sequence_keywords": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Sequence-related keywords like BRCA1 or mRNA"
+                                "description": "Sequences like 'APOE', 'PSEN1'"
                             },
                             "species": {
                                 "type": "string",
-                                "description": "Species name for genomic/protein/sequence data, default is homo_sapiens",
+                                "description": "Species name, default 'homo_sapiens'",
                                 "default": "homo_sapiens"
                             },
                             "need_trials": {"type": "boolean"},
                             "need_pubmed": {"type": "boolean"},
                             "need_ensembl": {
                                 "type": "boolean",
-                                "description": "Whether to query Ensembl if genomic terms are present"
+                                "description": "Query Ensembl if genomic terms are present"
                             },
                             "need_uniprot": {
                                 "type": "boolean",
-                                "description": "Whether to query UniProt if protein keywords are present"
+                                "description": "Query UniProt if protein keywords are present"
                             },
                             "need_genbank": {
                                 "type": "boolean",
-                                "description": "Whether to query GenBank if sequence keywords are present"
+                                "description": "Query GenBank if sequence keywords are present"
                             }
                         },
                         "required": [
@@ -101,26 +101,40 @@ class ChatGPTService:
             }
         ]
 
-    def analyze_query(self, user_query):
+    def analyze_query(self, user_query, chat_history=None):
         try:
             apis_called = []
             combined_info = ""
 
+            # Log chat_history for debugging
+            print(f"Chat history received: {chat_history}")
+
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a specialized assistant in a medical research chatbot focused on Alzheimer’s Disease (AD). "
+                        "Use previous messages in the conversation history to maintain context, avoiding redundant clarifications. "
+                        "For example, if AD or preclinical AD was mentioned, assume the query relates to it unless otherwise specified. "
+                        "Interpret 'preclinical AD' strictly as asymptomatic individuals with biomarker evidence (e.g., amyloid PET, plasma p-tau, APOE4), not animal or lab research. "
+                        "Analyze the query to extract precise keywords for diseases (e.g., 'Alzheimer’s Disease', 'AD', 'dementia'), treatments (e.g., 'donepezil', 'anti-amyloid'), genes (e.g., 'APOE4', 'PSEN1'), variants (e.g., 'rs429358'), phenotypes (e.g., 'cognitive decline'), proteins (e.g., 'amyloid-beta', 'tau'), and sequences (e.g., 'APOE'). "
+                        "Set 'need_ensembl' to true only for explicit gene_symbols, variant_ids, or phenotype_terms. Set 'need_uniprot' to true only for explicit protein_keywords. Set 'need_genbank' to true only for explicit sequence_keywords. "
+                        "Prioritize relevance, ensuring keywords align with the query’s intent and context."
+                    )
+                }
+            ]
+
+            if chat_history:
+                messages.extend(chat_history)
+            else:
+                messages.append({"role": "user", "content": user_query})
+
+            # Log messages for debugging
+            print(f"Messages sent to OpenAI: {messages}")
+
             response = self.client.chat.completions.create(
                 model="gpt-4",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You're a specialized assistant in a medical research chatbot. "
-                            "Analyze the query and extract disease keywords, treatment keywords, gene symbols, "
-                            "variant IDs, phenotype terms, protein keywords, and sequence keywords. Only set 'need_ensembl' to true if "
-                            "gene_symbols, variant_ids, or phenotype_terms are explicitly present. Only set 'need_uniprot' "
-                            "to true if protein_keywords are explicitly present. Only set 'need_genbank' to true if sequence_keywords are present."
-                        )
-                    },
-                    {"role": "user", "content": user_query}
-                ],
+                messages=messages,
                 tools=self.analyze_tools
             )
 
@@ -134,7 +148,6 @@ class ChatGPTService:
                 sequence_terms = " AND ".join(args["sequence_keywords"])
                 species = args.get("species", "homo_sapiens")
 
-                # PubMed search
                 if args.get("need_pubmed"):
                     apis_called.append("PubMed")
                     search_query = f"{treatment_terms} AND {condition_terms}"
@@ -146,7 +159,6 @@ class ChatGPTService:
                             combined_info += f"**Abstract:** {paper['abstract']}\n"
                             combined_info += f"**PMID:** {paper['pmid']}\n\n"
 
-                # Clinical Trials search
                 if args.get("need_trials"):
                     apis_called.append("Clinical Trials")
                     trials_results = search_clinical_trials(condition_terms, treatment_terms, max_results=3)
@@ -160,13 +172,11 @@ class ChatGPTService:
                             combined_info += f"**Description:** {trial.get('description', 'No description available')}\n"
                             combined_info += f"**NCT ID:** {trial['nct_id']}\n\n"
 
-                # Ensembl genomic data
                 if args.get("need_ensembl") and (
                     args.get("gene_symbols") or args.get("variant_ids") or args.get("phenotype_terms")
                 ):
                     apis_called.append("Ensembl")
 
-                    # Gene info
                     gene_results = []
                     for symbol in args["gene_symbols"]:
                         gene_results.extend(self.ensembl_service.search_gene_by_symbol(species, symbol))
@@ -178,7 +188,6 @@ class ChatGPTService:
                             combined_info += f"**Biotype:** {gene['biotype']}\n"
                             combined_info += f"**Location:** {gene['chromosome']}:{gene['start']}-{gene['end']} ({gene['strand']})\n\n"
 
-                    # Variant consequences
                     variant_results = []
                     for variant_id in args["variant_ids"]:
                         variant_results.extend(self.ensembl_service.search_variant_consequences(species, variant_id))
@@ -191,7 +200,6 @@ class ChatGPTService:
                             combined_info += f"**Consequences:** {', '.join(variant['consequence_terms'])}\n"
                             combined_info += f"**Impact:** {variant['impact']}\n\n"
 
-                    # Phenotype annotations
                     phenotype_results = []
                     for gene_symbol in args["gene_symbols"]:
                         phenotype_results.extend(self.ensembl_service.search_phenotype_by_gene(species, gene_symbol))
@@ -201,9 +209,8 @@ class ChatGPTService:
                             combined_info += f"**Gene:** {p['gene_symbol']}\n"
                             combined_info += f"**Phenotype:** {p['phenotype_description']}\n"
                             combined_info += f"**Source:** {p['source']}\n"
-                            combined_info += f"**Study:** {p['study']}\n\n"
+                            f"**Study:** {p['study']}\n\n"
 
-                # UniProt protein data
                 if args.get("need_uniprot") and args.get("protein_keywords"):
                     apis_called.append("UniProt")
                     uniprot_query = f"{protein_terms} AND {species}"
@@ -215,7 +222,6 @@ class ChatGPTService:
                             combined_info += f"**Protein Name:** {protein['protein_name']}\n"
                             combined_info += f"**Organism:** {protein['organism']}\n\n"
 
-                # GenBank sequence data
                 if args.get("need_genbank") and args.get("sequence_keywords"):
                     apis_called.append("GenBank")
                     genbank_query = f"{sequence_terms} AND {species}"
@@ -246,21 +252,25 @@ class ChatGPTService:
                 {
                     "role": "system",
                     "content": (
-                        "You are a professional medical assistant. Present information in a clear structure:\n"
-                        "1. Overview of the query\n"
-                        "2. Research findings (if available)\n"
-                        "3. Clinical trial information (if available)\n"
-                        "4. Genomic information (if available, including gene details, variants, and phenotypes)\n"
-                        "5. Protein information (if available, including UniProt data)\n"
-                        "6. Sequence information (if available, including GenBank data)\n"
-                        "7. Summary and recommendations\n"
-                        "Use bullet points and section headings."
+                        "You are a medical research assistant specializing in Alzheimer’s Disease (AD). "
+                        "Generate a concise, relevant, and actionable response tailored to the user's query, using provided information and conversation history. "
+                        "Structure the response as follows, including only sections with relevant data:\n"
+                        "1. **Overview**: Briefly summarize the query’s intent, referencing prior messages to maintain context (e.g., assume AD if previously mentioned).\n"
+                        "2. **Research Findings**: Summarize PubMed results if available.\n"
+                        "3. **Clinical Trials**: List trial details if available, ensuring relevance to AD for AD queries.\n"
+                        "4. **Genomic Information**: Include gene, variant, or phenotype data if available.\n"
+                        "5. **Protein Information**: Include UniProt data if available.\n"
+                        "6. **Sequence Information**: Include GenBank data if available.\n"
+                        "7. **Biomarkers**: For AD or preclinical AD queries, list amyloid PET (plaque imaging), plasma p-tau (tau pathology marker), and APOE4 (genetic risk factor).\n"
+                        "8. **Relevant Trials**: For AD, include A4 (NCT02008357, anti-amyloid), DIAN-TU (NCT01760005, inherited AD), or ALZ-801 (NCT04616690, tramiprosate) if relevant.\n"
+                        "9. **Summary and Recommendations**: Provide a concise synthesis with specific actions (e.g., 'Consult a neurologist for amyloid PET testing' or 'Explore A4 trial eligibility'). Avoid generic or vague statements.\n"
+                        "Use bullet points and section headings. Exclude sections with no data or irrelevant information. Ensure responses are precise, avoiding filler or redundant clarifications."
                     )
                 },
                 {"role": "user", "content": user_query}
             ]
 
-            if research_info:
+            if research_info and research_info.strip() != "No relevant information found.":
                 messages.append({"role": "user", "content": f"Information retrieved:\n\n{research_info}"})
 
             response = self.client.chat.completions.create(
