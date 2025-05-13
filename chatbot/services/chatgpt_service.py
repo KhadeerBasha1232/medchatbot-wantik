@@ -7,6 +7,8 @@ from chatbot.services.clinical_trials_service import search_clinical_trials
 from chatbot.services.ensembl_service import EnsemblService
 from chatbot.services.uniprot_service import UniProtService
 from chatbot.services.genbank_service import GenBankService
+from chatbot.services.protein_atlas_service import ProteinAtlasService
+from chatbot.services.array_express_service import ArrayExpressService
 
 load_dotenv()
 
@@ -16,13 +18,15 @@ class ChatGPTService:
         self.ensembl_service = EnsemblService()
         self.uniprot_service = UniProtService()
         self.genbank_service = GenBankService()
+        self.protein_atlas_service = ProteinAtlasService()
+        self.array_express_service = ArrayExpressService()
 
         self.analyze_tools = [
             {
                 "type": "function",
                 "function": {
                     "name": "get_research_and_trials",
-                    "description": "Get research papers, clinical trials, genomic, protein, and sequence data if keywords found in query",
+                    "description": "Get research papers, clinical trials, genomic, protein, sequence, and study data if keywords found in query",
                     "parameters": {
                         "type": "object",
                         "properties": {
@@ -39,7 +43,7 @@ class ChatGPTService:
                             "gene_symbols": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Genes like 'APOE4', 'PSEN1', 'APP'"
+                                "description": "Genes like 'APOE4', 'PSEN1', 'APP', 'MAPT'"
                             },
                             "variant_ids": {
                                 "type": "array",
@@ -54,7 +58,7 @@ class ChatGPTService:
                             "protein_keywords": {
                                 "type": "array",
                                 "items": {"type": "string"},
-                                "description": "Proteins like 'amyloid-beta', 'tau protein'"
+                                "description": "Proteins like 'amyloid-beta', 'tau protein', 'p-tau'"
                             },
                             "sequence_keywords": {
                                 "type": "array",
@@ -79,6 +83,14 @@ class ChatGPTService:
                             "need_genbank": {
                                 "type": "boolean",
                                 "description": "Query GenBank if sequence keywords are present"
+                            },
+                            "need_protein_atlas": {
+                                "type": "boolean",
+                                "description": "Query Protein Atlas if protein keywords or gene symbols are present"
+                            },
+                            "need_array_express": {
+                                "type": "boolean",
+                                "description": "Query ArrayExpress if protein keywords, gene symbols, or AD queries are present"
                             }
                         },
                         "required": [
@@ -94,7 +106,9 @@ class ChatGPTService:
                             "need_pubmed",
                             "need_ensembl",
                             "need_uniprot",
-                            "need_genbank"
+                            "need_genbank",
+                            "need_protein_atlas",
+                            "need_array_express"
                         ]
                     }
                 }
@@ -117,8 +131,15 @@ class ChatGPTService:
                         "Use previous messages in the conversation history to maintain context, avoiding redundant clarifications. "
                         "For example, if AD or preclinical AD was mentioned, assume the query relates to it unless otherwise specified. "
                         "Interpret 'preclinical AD' strictly as asymptomatic individuals with biomarker evidence (e.g., amyloid PET, plasma p-tau, APOE4), not animal or lab research. "
-                        "Analyze the query to extract precise keywords for diseases (e.g., 'Alzheimer’s Disease', 'AD', 'dementia'), treatments (e.g., 'donepezil', 'anti-amyloid'), genes (e.g., 'APOE4', 'PSEN1'), variants (e.g., 'rs429358'), phenotypes (e.g., 'cognitive decline'), proteins (e.g., 'amyloid-beta', 'tau'), and sequences (e.g., 'APOE'). "
-                        "Set 'need_ensembl' to true only for explicit gene_symbols, variant_ids, or phenotype_terms. Set 'need_uniprot' to true only for explicit protein_keywords. Set 'need_genbank' to true only for explicit sequence_keywords. "
+                        "Analyze the query to extract precise keywords for diseases (e.g., 'Alzheimer’s Disease', 'AD', 'dementia'), treatments (e.g., 'donepezil', 'anti-amyloid'), genes (e.g., 'APOE4', 'PSEN1', 'APP', 'MAPT'), variants (e.g., 'rs429358'), phenotypes (e.g., 'cognitive decline'), proteins (e.g., 'amyloid-beta', 'tau protein', 'p-tau'), and sequences (e.g., 'APOE'). "
+                        "For queries mentioning 'tau protein', include 'MAPT' in gene_symbols and 'tau protein', 'p-tau' in protein_keywords. "
+                        "For queries mentioning 'biomarkers' or 'protein' in AD context, include 'amyloid-beta', 'tau protein', 'p-tau' in protein_keywords and 'APP', 'MAPT', 'APOE4' in gene_symbols. "
+                        "Set 'need_ensembl' to true for gene_symbols, variant_ids, or phenotype_terms. "
+                        "Set 'need_uniprot' to true for protein_keywords. "
+                        "Set 'need_genbank' to true for sequence_keywords. "
+                        "Set 'need_protein_atlas' to true for protein_keywords, gene_symbols, or AD queries mentioning 'biomarkers' or 'protein'. "
+                        "Set 'need_array_express' to true for protein_keywords, gene_symbols, or AD queries mentioning 'biomarkers', 'protein', or 'studies'. "
+                        "Set 'need_trials' to true for AD or preclinical AD queries to include relevant trials (e.g., A4, DIAN-TU). "
                         "Prioritize relevance, ensuring keywords align with the query’s intent and context."
                     )
                 }
@@ -129,8 +150,6 @@ class ChatGPTService:
             else:
                 messages.append({"role": "user", "content": user_query})
 
-            # Log messages for debugging
-            print(f"Messages sent to OpenAI: {messages}")
 
             response = self.client.chat.completions.create(
                 model="gpt-4",
@@ -176,7 +195,6 @@ class ChatGPTService:
                     args.get("gene_symbols") or args.get("variant_ids") or args.get("phenotype_terms")
                 ):
                     apis_called.append("Ensembl")
-
                     gene_results = []
                     for symbol in args["gene_symbols"]:
                         gene_results.extend(self.ensembl_service.search_gene_by_symbol(species, symbol))
@@ -209,18 +227,65 @@ class ChatGPTService:
                             combined_info += f"**Gene:** {p['gene_symbol']}\n"
                             combined_info += f"**Phenotype:** {p['phenotype_description']}\n"
                             combined_info += f"**Source:** {p['source']}\n"
-                            f"**Study:** {p['study']}\n\n"
+                            combined_info += f"**Study:** {p['study']}\n\n"
 
                 if args.get("need_uniprot") and args.get("protein_keywords"):
                     apis_called.append("UniProt")
                     uniprot_query = f"{protein_terms} AND {species}"
                     uniprot_results = self.uniprot_service.search_uniprot(uniprot_query, max_results=3)
+                    # TODO: Implement AD relevance filtering in UniProtService
                     if uniprot_results:
-                        combined_info += "## Protein Information\n\n"
+                        combined_info += "## Protein Information (UniProt)\n\n"
                         for protein in uniprot_results:
                             combined_info += f"**Accession:** {protein['accession']}\n"
                             combined_info += f"**Protein Name:** {protein['protein_name']}\n"
                             combined_info += f"**Organism:** {protein['organism']}\n\n"
+
+                if args.get("need_protein_atlas") and (args.get("protein_keywords") or args.get("gene_symbols")):
+                    apis_called.append("Protein Atlas")
+                    protein_atlas_results = []
+                    if args.get("gene_symbols"):
+                        for symbol in args["gene_symbols"]:
+                            ensembl_results = self.ensembl_service.search_gene_by_symbol(species, symbol)
+                            for gene in ensembl_results:
+                                ensembl_id = gene.get('id')
+                                results = self.protein_atlas_service.search_protein_atlas("", max_results=1, ensembl_id=ensembl_id)
+                                protein_atlas_results.extend(results)
+                    if args.get("protein_keywords") and not protein_atlas_results:
+                        protein_query = f"{protein_terms} AND {species}"
+                        results = self.protein_atlas_service.search_protein_atlas(protein_query, max_results=3)
+                        protein_atlas_results.extend(results)
+                    if protein_atlas_results:
+                        combined_info += "## Protein Information (HPA)\n\n"
+                        for protein in protein_atlas_results:
+                            combined_info += f"**Gene:** {protein['gene']}\n"
+                            combined_info += f"**Ensembl ID:** {protein['ensembl_id']}\n"
+                            combined_info += f"**Tissue Expression (Cerebral Cortex):** {protein['tissue_expression']}\n"
+                            combined_info += f"**Pathology:** {protein['pathology']}\n"
+                            combined_info += f"**Subcellular Location:** {protein['subcellular_location']}\n\n"
+
+                if args.get("need_array_express") and (args.get("protein_keywords") or args.get("gene_symbols") or "biomarkers" in user_query.lower()):
+                    apis_called.append("ArrayExpress")
+                    array_express_results = []
+                    if args.get("protein_keywords"):
+                        for protein in args["protein_keywords"]:
+                            results = self.array_express_service.search_array_express(protein, max_results=2)
+                            array_express_results.extend(results)
+                    if args.get("gene_symbols"):
+                        for symbol in args["gene_symbols"]:
+                            results = self.array_express_service.search_array_express(symbol, max_results=2)
+                            array_express_results.extend(results)
+                    if not array_express_results and "Alzheimer’s Disease" in condition_terms:
+                        results = self.array_express_service.search_array_express("Alzheimer’s Disease", max_results=3)
+                        array_express_results.extend(results)
+                    if array_express_results:
+                        combined_info += "## Study Information (ArrayExpress)\n\n"
+                        for study in array_express_results:
+                            combined_info += f"**Accession:** {study['accession']}\n"
+                            combined_info += f"**Title:** {study['title']}\n"
+                            combined_info += f"**Description:** {study['description']}\n"
+                            combined_info += f"**Assay Count:** {study['assay_count']}\n"
+                            combined_info += f"**Study Type:** {study['study_type']}\n\n"
 
                 if args.get("need_genbank") and args.get("sequence_keywords"):
                     apis_called.append("GenBank")
@@ -234,14 +299,27 @@ class ChatGPTService:
                             combined_info += f"**Organism:** {sequence['organism']}\n\n"
 
                 print(f"\n=== APIs Called: {', '.join(apis_called)} ===\n")
-                print(combined_info)
 
+                # Update chat history
+                if chat_history is None:
+                    chat_history = []
+                chat_history.append({"role": "user", "content": user_query})
+                response_text = ""
                 if combined_info:
-                    return self.generate_response(user_query, combined_info)
+                    response_text = self.generate_response(user_query, combined_info)
                 else:
-                    return self.generate_response(user_query, "No relevant information found.")
+                    response_text = self.generate_response(user_query, "No relevant information found.")
+                chat_history.append({"role": "assistant", "content": response_text})
 
-            return self.generate_response(user_query)
+                return response_text
+
+            response_text = self.generate_response(user_query)
+            if chat_history is None:
+                chat_history = []
+            chat_history.append({"role": "user", "content": user_query})
+            chat_history.append({"role": "assistant", "content": response_text})
+
+            return response_text
 
         except Exception as e:
             return f"An error occurred while processing the query: {str(e)}"
@@ -255,15 +333,16 @@ class ChatGPTService:
                         "You are a medical research assistant specializing in Alzheimer’s Disease (AD). "
                         "Generate a concise, relevant, and actionable response tailored to the user's query, using provided information and conversation history. "
                         "Structure the response as follows, including only sections with relevant data:\n"
-                        "1. **Overview**: Briefly summarize the query’s intent, referencing prior messages to maintain context (e.g., assume AD if previously mentioned).\n"
-                        "2. **Research Findings**: Summarize PubMed results if available.\n"
-                        "3. **Clinical Trials**: List trial details if available, ensuring relevance to AD for AD queries.\n"
+                        "1. **Overview**: Briefly summarize the query’s intent, referencing prior messages to maintain context (e.g., assume AD if previously mentioned). For tau protein queries, note its role in forming neurofibrillary tangles in AD.\n"
+                        "2. **Research Findings**: Summarize PubMed results if available, focusing on AD relevance.\n"
+                        "3. **Clinical Trials**: List trial details if available, ensuring relevance to AD (e.g., A4, DIAN-TU, ALZ-801).\n"
                         "4. **Genomic Information**: Include gene, variant, or phenotype data if available.\n"
-                        "5. **Protein Information**: Include UniProt data if available.\n"
-                        "6. **Sequence Information**: Include GenBank data if available.\n"
-                        "7. **Biomarkers**: For AD or preclinical AD queries, list amyloid PET (plaque imaging), plasma p-tau (tau pathology marker), and APOE4 (genetic risk factor).\n"
-                        "8. **Relevant Trials**: For AD, include A4 (NCT02008357, anti-amyloid), DIAN-TU (NCT01760005, inherited AD), or ALZ-801 (NCT04616690, tramiprosate) if relevant.\n"
-                        "9. **Summary and Recommendations**: Provide a concise synthesis with specific actions (e.g., 'Consult a neurologist for amyloid PET testing' or 'Explore A4 trial eligibility'). Avoid generic or vague statements.\n"
+                        "5. **Protein Information**: Prioritize Human Protein Atlas (HPA) data if available, followed by UniProt data. Include details like tissue expression (e.g., cerebral cortex), pathology, and subcellular location for HPA.\n"
+                        "6. **Study Information**: Include ArrayExpress/BioStudies data if available, detailing study accession, title, description, and assay count.\n"
+                        "7. **Sequence Information**: Include GenBank data if available.\n"
+                        "8. **Biomarkers**: For AD or preclinical AD queries, list amyloid PET (plaque imaging), plasma p-tau (tau pathology marker), and APOE4 (genetic risk factor).\n"
+                        "9. **Relevant Trials**: For AD, include A4 (NCT02008357, anti-amyloid), DIAN-TU (NCT01760005, inherited AD), or ALZ-801 (NCT04616690, tramiprosate) if relevant.\n"
+                        "10. **Summary and Recommendations**: Provide a concise synthesis with specific actions (e.g., 'Consult a neurologist for amyloid PET testing' or 'Explore A4 trial eligibility'). Avoid generic or vague statements.\n"
                         "Use bullet points and section headings. Exclude sections with no data or irrelevant information. Ensure responses are precise, avoiding filler or redundant clarifications."
                     )
                 },
