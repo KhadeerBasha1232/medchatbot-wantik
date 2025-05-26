@@ -12,7 +12,7 @@ from .services.chatgpt_service import ChatGPTService
 
 chatgpt_service = ChatGPTService()
 
-@login_required
+# @login_required
 def register_view(request):
     if request.method == 'POST':
         form = RegisterForm(request.POST)
