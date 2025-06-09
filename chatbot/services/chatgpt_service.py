@@ -213,12 +213,18 @@ class ChatGPTService:
                 args = json.loads(tool_call.function.arguments)
                 logger.info(f"Tool call: {tool_name}, Arguments: {args}")
 
-                # Normalize terms
+                # Initialize common terms
                 condition_terms = " OR ".join([self.normalize_query_terms(k) for k in args["disease_keywords"]]) if args["disease_keywords"] else ""
                 treatment_terms = " OR ".join(args["treatment_keywords"]) if args["treatment_keywords"] else ""
-                protein_terms = " OR ".join(args["protein_keywords"]) if args["protein_keywords"] else ""
-                sequence_terms = " OR ".join(args["sequence_keywords"]) if args["sequence_keywords"] else ""
-                species = args.get("species", "homo_sapiens")
+
+                # Initialize tool-specific terms
+                protein_terms = ""
+                sequence_terms = ""
+                species = "homo_sapiens"  # Default species
+                if tool_name == "get_research_and_trials":
+                    protein_terms = " OR ".join(args["protein_keywords"]) if args.get("protein_keywords") else ""
+                    sequence_terms = " OR ".join(args["sequence_keywords"]) if args.get("sequence_keywords") else ""
+                    species = args.get("species", "homo_sapiens")
 
                 if tool_name == "get_clinical_trials" and args.get("need_trials"):
                     try:
@@ -487,7 +493,6 @@ class ChatGPTService:
         except Exception as e:
             logger.error(f"Query analysis failed: {str(e)}")
             return f"An error occurred while processing the query: {str(e)}"
-
     def generate_response(self, user_query, research_info=None, references=None, use_model_knowledge=False):
         try:
             logger.info(f"Generating response for query: {user_query}")
