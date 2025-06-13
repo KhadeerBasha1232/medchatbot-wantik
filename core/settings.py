@@ -139,3 +139,8 @@ STATICFILES_DIRS = [
 LOGIN_REDIRECT_URL = 'chatbot:chatbot'
 LOGOUT_REDIRECT_URL = 'chatbot:login'
 LOGIN_URL = 'chatbot:login'
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://13.234.198.68",
+]
