@@ -1,16 +1,18 @@
-from django.shortcuts import render
-from .forms import RegisterForm, LoginForm
-from django.contrib.auth import login, authenticate, logout
 from django.shortcuts import render, redirect
+from django.contrib.auth import login, authenticate, logout
 from django.contrib import messages
+from .forms import RegisterForm, LoginForm
 from .models import ChatMessage
 import json
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from .services.chatgpt_service import ChatGPTService
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 
 chatgpt_service = ChatGPTService()
+executor = ThreadPoolExecutor(max_workers=4)  # Adjust max_workers based on your needs
 
 # @login_required
 def register_view(request):
@@ -66,9 +68,11 @@ def chat_response(request):
             # Append current user query
             chat_history.append({"role": "user", "content": user_query})
             # Limit history to last 10 messages to avoid token overflow
-            chat_history = chat_history[-15:]
-            # Analyze query with history
-            response_text = chatgpt_service.analyze_query(user_query, chat_history)
+            chat_history = chat_history[-10:]
+            # Run the ChatGPTService call in a separate thread to avoid blocking
+            response_text = executor.submit(
+                partial(chatgpt_service.analyze_query, user_query, chat_history)
+            ).result()
             # Append bot response to history
             chat_history.append({"role": "assistant", "content": response_text})
             # Save updated history
