@@ -2,151 +2,95 @@
 {% load static %}
 {% load widget_tweaks %}
 
-{% block title %}chatbot{% endblock %}
+{% block title %}MediBot{% endblock %}
 
 {% block content %}
 <body class="bg-gray-50">
-    <div class="min-h-screen">
-        <!-- Navigation -->
-        <nav class="bg-white border-b sticky top-0 z-50">
-            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="flex justify-between h-16">
+    <div class="min-h-screen flex">
+        <!-- Sidebar -->
+        <div id="sidebar" class="w-64 bg-white border-r shadow-lg fixed top-0 left-0 h-full overflow-y-auto transition-all duration-300 z-[60] flex flex-col" data-collapsed="false">
+            <!-- Session List (Middle, Scrollable) -->
+            <div class="flex-1 p-4 overflow-y-auto" id="sessionList" style="margin-top: 60px;">
+                <!-- Sessions will be populated here by JavaScript -->
+            </div>
+            <!-- Logo and Buttons (Bottom) -->
+            <div class="p-4 border-t mt-auto">
+                <div class="flex items-center justify-between">
                     <div class="flex items-center">
-                        <svg class="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg class="h-8 w-8 text-blue-600 logo-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
                         </svg>
-                        <span class="ml-2 text-xl font-bold text-gray-900">Medi</span>
+                        <span class="ml-2 text-xl font-bold text-gray-900 logo-text">Medi</span>
                     </div>
-                    <div class="flex items-center space-x-4">
-                        <!-- <div class="relative">
-                            <button class="text-gray-500 hover:text-gray-700" id="notificationBtn">
-                                <span class="absolute -top-1 -right-1 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center">
-                                    <span class="text-xs text-white">3</span>
-                                </span>
-                                <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path>
-                                </svg>
-                            </button>
-                        </div> -->
-                        
-                        <div class="flex items-center space-x-3">
-                            <button class="flex items-center space-x-2 rounded-full bg-gray-200 p-1 hover:bg-gray-300 transition-colors" id="profileBtn">
-                                <!-- <img class="h-8 w-8 rounded-full" src="/api/placeholder/32/32" alt="Profile"> -->
-                                <span class="pr-2">{{user.username}}</span>
-                            </button>
-                            <a href="{% url 'chatbot:logout' %}" class="text-gray-600 hover:text-gray-800 transition-colors">
-                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
-                                </svg>
-                            </a>
-                        </div>
+                    <div class="flex items-center space-x-2 button-container">
+                        <button class="text-gray-500 hover:text-gray-700 bg-gray-100 p-1 rounded" id="newChatBtn">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                            </svg>
+                        </button>
+                        <button class="text-gray-500 hover:text-gray-700 bg-gray-100 p-1 rounded" id="toggleSidebarBtn">
+                            <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                            </svg>
+                        </button>
                     </div>
                 </div>
             </div>
-        </nav>
+        </div>
 
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-            <div class="grid grid-cols-12 gap-6">
-                <!-- Sidebar -->
-                <!-- <div class="col-span-12 lg:col-span-3">
-                    <div class="bg-white rounded-lg shadow-lg p-6 hover-scale">
-                        <h2 class="text-lg font-semibold mb-4">Quick Actions</h2>
-                        <div class="space-y-3">
-                            <button class="w-full flex items-center justify-between p-3 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors" id="scheduleBtn">
-                                <span class="flex items-center">
-                                    <svg class="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                                    </svg>
-                                    Schedule Appointment
-                                </span>
-                                <span class="text-sm bg-blue-200 text-blue-800 px-2 py-1 rounded-full">New</span>
-                            </button>
-                            <button class="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group">
-                                <span class="flex items-center">
-                                    <svg class="w-5 h-5 mr-3 text-green-500 group-hover:text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    View Reports
-                                </span>
-                                <svg class="w-5 h-5 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                            <button class="w-full flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors group">
-                                <span class="flex items-center">
-                                    <svg class="w-5 h-5 mr-3 text-purple-500 group-hover:text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                    Medical History
-                                </span>
-                                <svg class="w-5 h-5 text-gray-400 group-hover:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                </svg>
-                            </button>
-                            <div class="p-4 bg-gray-50 rounded-lg mt-6">
-                                <h3 class="text-sm font-medium text-gray-900 mb-2">Need urgent care?</h3>
-                                <p class="text-sm text-gray-600 mb-3">Contact emergency services or visit nearest hospital</p>
-                                <button class="w-full bg-red-500 text-white py-2 px-4 rounded-lg hover:bg-red-600 transition-colors" id="emergencyBtn">
-                                    Call Emergency
+        <!-- Main Content -->
+        <div id="mainContent" class="flex-1 ml-64 transition-all duration-300">
+            <!-- Navigation -->
+            <nav class="bg-white border-b sticky top-0 z-50">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="flex justify-between h-16">
+                        <div class="flex items-center">
+                            <h2 class="text-lg font-semibold" id="sessionTitle">Medical Assistant</h2>
+                        </div>
+                        <div class="flex items-center space-x-4">
+                            <div class="flex items-center space-x-3">
+                                <button class="flex items-center space-x-2 rounded-full bg-gray-200 p-1 hover:bg-gray-300 transition-colors" id="profileBtn">
+                                    <span class="pr-2">{{user.username}}</span>
                                 </button>
+                                <a href="{% url 'chatbot:logout' %}" class="text-gray-600 hover:text-gray-800 transition-colors">
+                                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+                                    </svg>
+                                </a>
                             </div>
                         </div>
                     </div>
-                </div> -->
+                </div>
+            </nav>
 
-                <!-- Main Chat Area -->
-                <div class="col-span-12 lg:col-span-9">
-                    <div class="bg-white rounded-lg shadow-lg">
-                        <div class="p-4 border-b">
-                            <div class="flex items-center justify-between">
-                                <div>
-                                    <h2 class="text-lg font-semibold">Medical Assistant</h2>
-                                    <div class="flex items-center mt-1">
-                                        <span class="h-2 w-2 rounded-full bg-green-500 mr-2"></span>
-                                        <p class="text-sm text-gray-500">Online • Ready to help</p>
-                                    </div>
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                <div class="bg-white rounded-lg shadow-lg">
+                    <div class="p-4 border-b">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h2 class="text-lg font-semibold">Medical Assistant</h2>
+                                <div class="flex items-center mt-1">
+                                    <span class="h-2 w-2 rounded-full bg-green-500 mr-2"></span>
+                                    <p class="text-sm text-gray-500">Online • Ready to help</p>
                                 </div>
-                                <!-- <div class="flex gap-3">
-                                    <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors tooltip" id="voiceCallBtn" title="Start voice call">
-                                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                                        </svg>
-                                    </button>
-                                    <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors tooltip" id="videoCallBtn" title="Start video call">
-                                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                                        </svg>
-                                    </button>
-                                    <button class="p-2 rounded-lg hover:bg-gray-100 transition-colors" id="settingsBtn">
-                                        <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path>
-                                        </svg>
-                                    </button>
-                                </div> -->
                             </div>
                         </div>
+                    </div>
 
-                        <div class="chat-container overflow-y-auto p-4 space-y-4" id="chatContainer">
-                            <!-- Messages will be added here by JavaScript -->
-                        </div>
+                    <div class="chat-container overflow-y-auto p-4 space-y-4 max-h-[calc(100vh-256px)] hide-scrollbar" id="chatContainer">
+                        <!-- Messages will be added here by JavaScript -->
+                    </div>
 
-                        <div class="p-4 border-t">
-                            <div class="flex gap-2">
-                                <button class="p-2 rounded-full hover:bg-gray-100 transition-colors" id="attachBtn">
-                                    <svg class="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-                                    </svg>
-                                </button>
-                                <input type="text" id="messageInput" placeholder="Type your message..." 
-                                    class="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                                <button class="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2" id="sendBtn">
-                                    <span class="hidden sm:inline">Send</span>
-                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                                    </svg>
-                                </button>
-                            </div>
-                            
+                    <div class="p-4 border-t">
+                        <div class="flex gap-2">
+                            <input type="text" id="messageInput" placeholder="Type your message..." 
+                                class="flex-1 p-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <button class="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2" id="sendBtn">
+                                <span class="hidden sm:inline">Send</span>
+                                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                                </svg>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -154,6 +98,47 @@
         </div>
     </div>
 
+    <style>
+        /* Hide scrollbar when not needed */
+        .hide-scrollbar {
+            scrollbar-width: none; /* Firefox */
+            -ms-overflow-style: none; /* IE and Edge */
+        }
+        .hide-scrollbar::-webkit-scrollbar {
+            display: none; /* Chrome, Safari, Opera */
+        }
+        /* Ensure scrollability when content overflows */
+        .chat-container {
+            overflow-y: auto;
+        }
+        /* Sidebar collapsed styles */
+        #sidebar[data-collapsed="true"] .logo-text {
+            display: none;
+        }
+        #sidebar[data-collapsed="true"] .logo-icon {
+            margin-left: 8px;
+        }
+        #sidebar[data-collapsed="true"] #sessionList {
+            display: none;
+        }
+        #sidebar[data-collapsed="true"] .p-4 {
+            padding: 8px;
+        }
+        #sidebar[data-collapsed="true"] .button-container {
+            flex-direction: column;
+            gap: 8px;
+        }
+        /* Ensure bottom section stays at bottom */
+        #sidebar {
+            display: flex;
+            flex-direction: column;
+        }
+        #sidebar .p-4.border-t {
+            margin-top: auto;
+        }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="{% static 'assets/js/chat.js' %}"></script>
 </body>
 </html>

@@ -37,4 +37,10 @@
         </form>
     </div>
 </div>
+
+<script>
+        // Clear currentSessionId from localStorage on login page load
+        localStorage.removeItem('currentSessionId');
+        console.log('Cleared currentSessionId on login page load');
+    </script>
 {% endblock %}
