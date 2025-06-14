@@ -201,7 +201,7 @@ class ChatGPTService:
             logger.debug(f"Messages sent to OpenAI: {messages}")
 
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=messages,
                 tools=self.analyze_tools,
                 temperature=0.7
@@ -535,7 +535,7 @@ class ChatGPTService:
                 messages.append({"role": "user", "content": "No API data available. Use your internal knowledge to provide a comprehensive response."})
 
             response = self.client.chat.completions.create(
-                model="gpt-4o",
+                model="gpt-4",
                 messages=messages,
                 temperature=0.7,
                 max_tokens=1500
