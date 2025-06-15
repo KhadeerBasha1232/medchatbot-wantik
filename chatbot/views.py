@@ -109,6 +109,8 @@ def chat_response(request):
                 {"role": "assistant", "content": msg.response}
                 for msg in session.messages.all()
             ]
+            print(f"Chat history for session {session.session_id}: {chat_history}")
+
             chat_history.append({"role": "user", "content": user_query})
             chat_history = chat_history[-10:]  # Limit to last 10 messages
             # Get response from ChatGPTService
