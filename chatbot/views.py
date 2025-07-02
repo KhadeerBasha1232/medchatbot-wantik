@@ -101,18 +101,17 @@ def chat_response(request):
                 # Update session title to first 50 characters of the query (or entire query if shorter)
                 session.title = user_query[:50] + "..." if len(user_query) > 50 else user_query
                 session.save()
-            # Retrieve session chat history
-            chat_history = [
-                {"role": "user", "content": msg.message}
-                for msg in session.messages.all()
-            ] + [
-                {"role": "assistant", "content": msg.response}
-                for msg in session.messages.all()
-            ]
+            # Retrieve session chat history (properly interleaved)
+            chat_history = []
+            messages = session.messages.all().order_by('created_at')
+            for msg in messages:
+                chat_history.append({"role": "user", "content": msg.message})
+                chat_history.append({"role": "assistant", "content": msg.response})
+            
             print(f"Chat history for session {session.session_id}: {chat_history}")
-
-            chat_history.append({"role": "user", "content": user_query})
-            chat_history = chat_history[-10:]  # Limit to last 10 messages
+            
+            # Limit to last 4 exchanges (8 messages) to avoid token limits
+            chat_history = chat_history[-8:]
             # Get response from ChatGPTService
             response_text = executor.submit(
                 partial(chatgpt_service.analyze_query, user_query, chat_history)

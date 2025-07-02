@@ -138,6 +138,35 @@ class ChatGPTService:
             }
         ]
 
+    def count_tokens(self, text):
+        """Rough token estimation: ~4 chars = 1 token"""
+        return len(text) // 4
+    
+    def trim_chat_history(self, chat_history, max_tokens=2000):
+        """Keep chat history under token limit"""
+        if not chat_history:
+            return chat_history
+            
+        total_tokens = 0
+        trimmed_history = []
+        
+        # Process messages in reverse order to keep most recent ones
+        for message in reversed(chat_history):
+            msg_tokens = self.count_tokens(message.get('content', ''))
+            if total_tokens + msg_tokens > max_tokens:
+                break
+            trimmed_history.insert(0, message)
+            total_tokens += msg_tokens
+        
+        logger.info(f"Trimmed chat history from {len(chat_history)} to {len(trimmed_history)} messages, using {total_tokens} tokens")
+        return trimmed_history
+
+    def truncate_content(self, content, max_length=500):
+        """Truncate long content with ellipsis"""
+        if len(content) > max_length:
+            return content[:max_length] + "..."
+        return content
+
     def normalize_query_terms(self, term):
         """Normalize query terms for API compatibility."""
         term = term.lower()
@@ -165,50 +194,20 @@ class ChatGPTService:
                 {
                     "role": "system",
                     "content": (
-                        "You are an advanced medical research assistant covering all medical fields, including diseases, treatments, genetics, and biomarkers. "
-                        "Your goal is to provide a precise, relevant, and comprehensive response to the user's query, leveraging conversation history to maintain context and avoid irrelevant information. "
-                        "Follow these steps:\n"
-                        "1. **Context Analysis**:\n"
-                        "   - If chat_history is provided, analyze it to identify the primary topic (e.g., 'Alzheimer’s Disease endpoints') and key terms from the most recent user query and response.\n"
-                        "   - For vague queries (e.g., 'more details', 'explain further'), prioritize the primary topic and keywords from the last user query in chat_history to ensure continuity.\n"
-                        "   - If the query explicitly shifts focus (e.g., mentions a new disease or topic), treat it as a new context but still consider chat_history for related terms.\n"
-                        "2. **Keyword Extraction**:\n"
-                        "   - Extract precise keywords from the current query and, if relevant, from chat_history:\n"
-                        "     - **Disease Keywords**: Conditions like 'Alzheimer’s Disease', 'diabetes', 'breast cancer'. Include synonyms (e.g., 'AD' for Alzheimer’s).\n"
-                        "     - **Treatment Keywords**: Treatments or interventions (e.g., 'insulin', 'chemotherapy'). Set to empty if none specified.\n"
-                        "     - **Gene Symbols**: Genes like 'APOE4', 'BRCA1', 'LRRK2'.\n"
-                        "     - **Variant IDs**: Variant IDs like 'rs429358'.\n"
-                        "     - **Phenotype Terms**: Phenotypes like 'cognitive decline', 'motor dysfunction'.\n"
-                        "     - **Protein Keywords**: Proteins like 'amyloid-beta', 'alpha-synuclein'.\n"
-                        "     - **Sequence Keywords**: Sequence terms like 'APOE', 'BRAF'.\n"
-                        "     - **Species**: Default to 'homo_sapiens' unless specified.\n"
-                        "   - Combine keywords from the current query and chat_history (if relevant) to ensure comprehensive coverage.\n"
-                        "3. **API Flags**:\n"
-                        "   - Set API flags based on query intent and context:\n"
-                        "     - **need_trials**: True if query or chat_history mentions 'clinical trials', 'studies', or implies trial data.\n"
-                        "     - **need_pubmed**: True if query or chat_history mentions 'research papers', 'studies', or implies literature search.\n"
-                        "     - **need_ensembl**: True for gene_symbols, variant_ids, or phenotype_terms.\n"
-                        "     - **need_uniprot**: True for protein_keywords.\n"
-                        "     - **need_genbank**: True for sequence_keywords.\n"
-                        "     - **need_protein_atlas**: True for protein_keywords or gene_symbols.\n"
-                        "     - **need_array_express**: True for protein_keywords, gene_symbols, or 'studies'/'biomarkers'.\n"
-                        "     - **need_geo**: True for protein_keywords, gene_symbols, or 'studies'/'biomarkers'.\n"
-                        "4. **Tool Selection**:\n"
-                        "   - Use 'get_clinical_trials' for trial-focused queries (e.g., 'clinical trials for AD').\n"
-                        "   - Use 'get_research_and_trials' for queries involving research papers, genetics, proteins, or mixed data.\n"
-                        "5. **Relevance Check**:\n"
-                        "   - Ensure all extracted keywords and API calls align with the query’s intent and chat_history’s primary topic.\n"
-                        "   - For follow-up queries, constrain API searches to keywords from the prior query (e.g., 'Alzheimer’s Disease', 'endpoints') unless the new query clearly shifts focus.\n"
-                        "6. **Normalization**:\n"
-                        "   - Normalize disease terms (e.g., 'Alzheimer’s Disease' to 'Alzheimer Disease') for API compatibility.\n"
-                        "7. **Output**:\n"
-                        "   - Return a JSON object with extracted keywords, API flags, and selected tool, ensuring alignment with the query and chat_history.\n"
-                        "Prioritize relevance, maintaining strict focus on the query’s intent and chat_history’s context to avoid unrelated information."
+                        "You are an expert medical query analyzer. Extract comprehensive keywords and set appropriate API flags:\n"
+                        "**Extract Keywords**: disease_keywords (conditions, syndromes), treatment_keywords (therapies, drugs, interventions), "
+                        "gene_symbols (APOE, BRCA1), variant_ids (rs numbers), phenotype_terms (symptoms, outcomes), "
+                        "protein_keywords (enzymes, biomarkers), sequence_keywords (DNA/RNA sequences), species (default: homo_sapiens)\n"
+                        "**Set API Flags**: need_trials (clinical studies), need_pubmed (research literature), need_ensembl (genomics), "
+                        "need_uniprot (proteins), need_genbank (sequences), need_protein_atlas, need_array_express, need_geo\n"
+                        "**Tools**: Use 'get_clinical_trials' for trial-only queries, 'get_research_and_trials' for comprehensive searches\n"
+                        "**Context**: Analyze chat history for follow-up questions - inherit relevant keywords from previous exchanges"
                     )
                 }
             ]
 
             if chat_history:
+                chat_history = self.trim_chat_history(chat_history, max_tokens=1500)  # Conservative limit for analyze_query
                 messages.extend(chat_history)
             messages.append({"role": "user", "content": user_query})
 
@@ -243,7 +242,7 @@ class ChatGPTService:
                 if tool_name == "get_clinical_trials" and args.get("need_trials"):
                     try:
                         apis_called.append("Clinical Trials")
-                        trials_results = search_clinical_trials(condition_terms, treatment_terms, max_results=5)
+                        trials_results = search_clinical_trials(condition_terms, treatment_terms, max_results=3)
                         if trials_results:
                             combined_info += "## Clinical Trials\n\n"
                             for trial in trials_results:
@@ -251,7 +250,7 @@ class ChatGPTService:
                                 combined_info += f"**Status:** {trial['status']}\n"
                                 combined_info += f"**Phase:** {trial.get('phase', 'Not specified')}\n"
                                 combined_info += f"**Interventions:** {', '.join(trial.get('interventions', ['Not specified']))}\n"
-                                combined_info += f"**Description:** {trial.get('description', 'No description available')}\n"
+                                combined_info += f"**Description:** {self.truncate_content(trial.get('description', 'No description available'), 300)}\n"
                                 combined_info += f"**NCT ID:** {trial['nct_id']}\n\n"
                                 references.append(f"Clinical Trial: {trial['title']} (NCT{trial['nct_id']}), [https://clinicaltrials.gov/study/{trial['nct_id']}](https://clinicaltrials.gov/study/{trial['nct_id']})")
                         else:
@@ -267,12 +266,12 @@ class ChatGPTService:
                         try:
                             apis_called.append("PubMed")
                             search_query = f"{treatment_terms} {condition_terms}".strip()
-                            pubmed_results = search_pubmed(search_query, api_key=os.getenv("PUBMED_API_KEY", ""), max_results=3)
+                            pubmed_results = search_pubmed(search_query, api_key=os.getenv("PUBMED_API_KEY", ""), max_results=2)
                             if pubmed_results:
                                 combined_info += "## Research Papers\n\n"
                                 for paper in pubmed_results:
                                     combined_info += f"**Title:** {paper['title']}\n"
-                                    combined_info += f"**Abstract:** {paper['abstract']}\n"
+                                    combined_info += f"**Abstract:** {self.truncate_content(paper['abstract'], 400)}\n"
                                     combined_info += f"**PMID:** {paper['pmid']}\n\n"
                                     references.append(f"PubMed: {paper['title']} (PMID: {paper['pmid']}), [https://pubmed.ncbi.nlm.nih.gov/{paper['pmid']}](https://pubmed.ncbi.nlm.nih.gov/{paper['pmid']})")
                             else:
@@ -286,7 +285,7 @@ class ChatGPTService:
                     if args.get("need_trials"):
                         try:
                             apis_called.append("Clinical Trials")
-                            trials_results = search_clinical_trials(condition_terms, treatment_terms, max_results=5)
+                            trials_results = search_clinical_trials(condition_terms, treatment_terms, max_results=3)
                             if trials_results:
                                 combined_info += "## Clinical Trials\n\n"
                                 for trial in trials_results:
@@ -294,7 +293,7 @@ class ChatGPTService:
                                     combined_info += f"**Status:** {trial['status']}\n"
                                     combined_info += f"**Phase:** {trial.get('phase', 'Not specified')}\n"
                                     combined_info += f"**Interventions:** {', '.join(trial.get('interventions', ['Not specified']))}\n"
-                                    combined_info += f"**Description:** {trial.get('description', 'No description available')}\n"
+                                    combined_info += f"**Description:** {self.truncate_content(trial.get('description', 'No description available'), 300)}\n"
                                     combined_info += f"**NCT ID:** {trial['nct_id']}\n\n"
                                     references.append(f"Clinical Trial: {trial['title']} (NCT{trial['nct_id']}), [https://clinicaltrials.gov/study/{trial['nct_id']}](https://clinicaltrials.gov/study/{trial['nct_id']})")
                             else:
@@ -332,7 +331,7 @@ class ChatGPTService:
                                     combined_info += f"**Transcript:** {variant['transcript_id']}\n"
                                     combined_info += f"**Consequences:** {', '.join(variant['consequence_terms'])}\n"
                                     combined_info += f"**Impact:** {variant['impact']}\n\n"
-                                    references.append(f"Ensembl Variant: {variant['variant_id']}, [https://ensembl.org/Homo_sapiens/Variation/Explore?v={variant['variant_id']}](https://ensembl.org/Homo_sapiens/Variation/Explore?v={variant['variant_id']})")
+                                    references.append(f"Ensembl Variant: {variant['variant_id']}, [https://ensembl.org/Homo_sapiens/Variation/Explore?v={variant['variant_id']}]https://ensembl.org/Homo_sapiens/Variation/Explore?v={variant['variant_id']})")
                             logger.info(f"Ensembl variant results: {variant_results}")
 
                             phenotype_results = []
@@ -484,9 +483,9 @@ class ChatGPTService:
 
                 if not combined_info.strip() or combined_info.strip() == "No relevant information found.":
                     logger.info("No API data found, falling back to model knowledge.")
-                    response_text = self.generate_response(user_query, use_model_knowledge=True)
+                    response_text = self.generate_response(user_query, use_model_knowledge=True, chat_history=chat_history)
                 else:
-                    response_text = self.generate_response(user_query, combined_info, references)
+                    response_text = self.generate_response(user_query, combined_info, references, chat_history=chat_history)
 
                 if chat_history is None:
                     chat_history = []
@@ -496,7 +495,7 @@ class ChatGPTService:
                 return response_text
 
             logger.info("No tool calls, using model knowledge.")
-            response_text = self.generate_response(user_query, use_model_knowledge=True)
+            response_text = self.generate_response(user_query, use_model_knowledge=True, chat_history=chat_history)
             if chat_history is None:
                 chat_history = []
             chat_history.append({"role": "user", "content": user_query})
@@ -507,59 +506,37 @@ class ChatGPTService:
         except Exception as e:
             logger.error(f"Query analysis failed: {str(e)}")
             return f"An error occurred while processing the query: {str(e)}"
-    def generate_response(self, user_query, research_info=None, references=None, use_model_knowledge=False):
+    def generate_response(self, user_query, research_info=None, references=None, use_model_knowledge=False, chat_history=None):
         try:
             logger.info(f"Generating response for query: {user_query}")
             logger.info(f"Research info: {research_info}")
             logger.info(f"References: {references}")
             logger.info(f"Use model knowledge: {use_model_knowledge} - {user_query}")
+            logger.info(f"Chat history length: {len(chat_history) if chat_history else 0}")
 
             messages = [
     {
         "role": "system",
         "content": (
-            "You are an advanced medical research assistant with unmatched expertise across all medical domains, including diseases, treatments, genetics, proteins, biomarkers, clinical research, and epidemiology. Your goal is to deliver a 100/100 response: an ultra-precise, deeply researched, concise, and actionable answer that fully addresses the user’s query with granular detail, anticipates expert-level follow-ups, and eliminates the need for further searches. Follow these guidelines:\n\n"
-            "1. **Response Principles**:\n"
-            "   - **Relevance**: Strictly focus on the query’s core (e.g., for ‘endpoints of AD,’ detail measurable trial outcomes). Exclude unrelated or tangentially related information (e.g., AD pathogenesis, unrelated therapies) unless it directly supports the query or anticipates follow-ups. Every sentence must be query-specific and advance the answer.\n"
-            "   - **Clarity**: Use precise, concise language tailored to a mixed audience (researchers, clinicians, patients). Define complex terms in parentheses (e.g., ‘amyloid-beta (Aβ, a protein forming plaques in Alzheimer’s)’). Balance technical depth with accessibility, avoiding jargon overload.\n"
-            "   - **Completeness**: Provide a definitive, granular answer covering all relevant aspects, integrating real-time API data (e.g., PubMed, ClinicalTrials.gov, Ensembl, UniProt, Human Protein Atlas, ArrayExpress, GEO, GenBank) with a comprehensive knowledge base. If API data is unavailable, use peer-reviewed evidence, noting ‘Based on current medical knowledge (as of June 2025)’ for transparency.\n"
-            "   - **Actionability**: Include query-specific practical implications for clinicians (e.g., diagnostic protocols), patients (e.g., lifestyle interventions), and researchers (e.g., trial design optimization). Provide decision-making tools (e.g., endpoint selection frameworks, statistical models) to enhance usability.\n"
-            "   - **References**: Include Markdown-formatted citations in every response, prioritizing 4–6 high-impact, peer-reviewed sources (e.g., meta-analyses, clinical guidelines, landmark trials) directly relevant to the query. Verify citations to exclude irrelevant, outdated, or low-quality references. Include DOIs or URLs for accessibility.\n"
-            "   - **Abbreviation Resolution**: Resolve ambiguous terms or abbreviations (e.g., ‘AD’ as Alzheimer’s Disease) using a dynamic mechanism: cross-reference a predefined list of medical abbreviations (e.g., AD: Alzheimer’s Disease, atopic dermatitis; CHF: congestive heart failure), query context, prior interactions, and real-time validation against medical databases (e.g., MeSH, SNOMED CT). Prioritize the most contextually and literature-frequent interpretation, note the assumption (e.g., ‘Assuming AD refers to Alzheimer’s Disease’), and mention alternatives only if ambiguity is significant.\n\n"
-            "2. **Response Structure**:\n"
-            "   - Use a flexible, query-tailored framework, including only relevant sections from the following, optimized for depth, brevity, and impact:\n"
-            "     - **Overview**: Summarize the query’s intent in 1–2 sentences, incorporating prior context. For diseases, include prevalence, societal impact, and global burden (e.g., ‘Alzheimer’s affects 6.7 million U.S. adults, costing $360 billion annually’). For genes/proteins, outline biological roles.\n"
-            "     - **Key Findings**: Summarize API-derived data (e.g., PubMed results) directly tied to the query, supplemented with recent meta-analyses, landmark studies, or emerging trends. Include statistical details (e.g., effect sizes, p-values, confidence intervals) and study limitations.\n"
-            "     - **Clinical Trials**: Detail 2–3 relevant trials (title, status, phase, interventions, NCT ID, sample size, primary outcomes), with insights on design, effect sizes, and generalizability.\n"
-            "     - **Genomic Information**: Provide gene/variant data (e.g., rsIDs, allele frequencies), explaining functions and phenotype associations (e.g., ‘APOE4 increases AD risk 3–15x’).\n"
-            "     - **Protein Information**: Describe protein roles, tissue expression, and disease mechanisms, using API data (e.g., UniProt, Human Protein Atlas).\n"
-            "     - **Study Information**: Include relevant study data (e.g., ArrayExpress, GEO accession IDs), with methodology, sample size, and findings context.\n"
-            "     - **Sequence Information**: Provide GenBank data (e.g., accession IDs) and explain sequence relevance (e.g., ‘BRAF V600E activates MAPK pathway’).\n"
-            "     - **Biomarkers**: List diagnostic, prognostic, or therapeutic biomarkers, with assay methods, cutoffs, sensitivity/specificity, and clinical guidelines.\n"
-            "     - **Therapeutic Insights**: Detail approved, off-label, or experimental therapies, with mechanisms, efficacy (e.g., hazard ratios), side effects, and eligibility criteria.\n"
-            "     - **Clinical Implications**: Outline actionable applications for clinicians (e.g., diagnostic algorithms), patients (e.g., risk reduction strategies), and researchers (e.g., power calculations).\n"
-            "     - **Future Directions**: Highlight ongoing research, upcoming trials, or technological advances (e.g., AI diagnostics), predicting clinical or research impacts with timelines.\n"
-            "   - Use bullet points, headings, and tables for readability. Exclude irrelevant sections to maintain precision and brevity.\n"
-            "   - Anticipate expert-level follow-ups by including advanced tools (e.g., decision trees, statistical models, endpoint selection rationale) and addressing related topics concisely.\n\n"
-            "3. **Presentation**:\n"
-            "   - Ensure responses are visually clear, with bullet points, concise paragraphs, logical flow, and minimal redundancy.\n"
-            "   - Dynamically tailor technical depth to inferred user expertise (e.g., simpler for patients, detailed for researchers) based on query complexity, terminology, or prior interactions. Use explicit cues (e.g., ‘for clinical trials’ suggests researcher focus) to guide adaptation.\n"
-            "   - For data-heavy responses, use tables, lists, or frameworks to enhance clarity and usability.\n\n"
-            "4. **Citations**:\n"
-            "   - Provide a **References** section in every response, listing 4–6 high-impact, query-specific sources in Markdown format. Include DOIs or URLs for accessibility.\n"
-            "   - Verify API-derived citations (e.g., PubMed, ClinicalTrials.gov) and supplement with curated knowledge-based sources or database search links. Exclude low-impact or irrelevant references.\n\n"
-            "5. **User Feedback and Context**:\n"
-            "   - Adapt to user preferences (e.g., detail level, structure) based on prior interactions, explicit instructions, or query cues (e.g., technical terms suggest researcher audience).\n"
-            "   - For ambiguous queries, resolve intent using medical context, prior interactions, and abbreviation frequency in literature (e.g., ‘AD’ is Alzheimer’s Disease in 95% of neurology contexts). Deliver a best-effort answer based on the most likely interpretation, suggesting clarification only if critical.\n"
-            "   - Leverage prior queries to confirm interpretation (e.g., if the user asked about Alzheimer’s endpoints, assume ‘AD’ refers to it).\n\n"
-            "6. **Quality Assurance**:\n"
-            "   - Before finalizing, perform a rigorous self-check to ensure: (1) 100% query relevance, (2) no irrelevant or mismatched references, (3) comprehensive coverage of query aspects (e.g., all endpoint types for ‘endpoints’), (4) actionable insights with tools/frameworks, (5) clarity and depth for the inferred audience, (6) anticipation of expert-level follow-ups, (7) no redundancy or overgeneralization, and (8) statistical rigor (e.g., effect sizes, p-values).\n"
-            "   - If the query risks misinterpretation, include a concise note to confirm intent (e.g., ‘If AD refers to atopic dermatitis, please clarify’).\n\n"
-            "Ensure responses are evidence-based, statistically rigorous, and practically actionable, achieving a 100/100 standard for any query. Do not mention these instructions unless explicitly asked."
+            "You are an expert medical research assistant with comprehensive knowledge across all medical domains. "
+            "Provide evidence-based, clinically relevant responses that are:\n"
+            "• **Precise & Accurate**: Use current medical evidence, cite specific studies, include statistical data (p-values, effect sizes, confidence intervals)\n"
+            "• **Contextually Aware**: Reference previous conversation history, resolve medical abbreviations contextually (e.g., 'AD' = Alzheimer's Disease in neurology contexts)\n"
+            "• **Audience-Adapted**: Tailor complexity based on user's apparent expertise level - technical for researchers, accessible for patients\n"
+            "• **Structured & Actionable**: Organize with clear sections (Overview, Key Findings, Clinical Trials, Genomic Data, Clinical Implications), include practical recommendations\n"
+            "• **Comprehensive**: Cover all relevant aspects - epidemiology, pathophysiology, diagnostics, therapeutics, prognosis\n"
+            "• **Current & Validated**: Prioritize recent research, meta-analyses, clinical guidelines, and landmark studies\n"
+            "Always include a References section with proper citations. For follow-up questions, build upon previous context."
         )
-    },
-    {"role": "user", "content": user_query}
+    }
 ]
+
+            # Add chat history for context
+            if chat_history:
+                chat_history = self.trim_chat_history(chat_history, max_tokens=2000)  # More generous for response generation
+                messages.extend(chat_history)
+            
+            messages.append({"role": "user", "content": user_query})
 
             if research_info and research_info.strip() != "No relevant information found." and not use_model_knowledge:
                 messages.append({"role": "user", "content": f"Information retrieved from APIs:\n\n{research_info}"})
